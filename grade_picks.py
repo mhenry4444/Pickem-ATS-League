@@ -43,68 +43,55 @@ def grade_picks(picks_csv_path='picks.csv', outcomes_json_path=None, matchups_fi
     # Filter to this week
     picks_df = picks_df[picks_df['Week'] == week]
     
-    # Load outcomes JSON for ATS covers
+    # Load outcomes (with covers and spreads)
     with open(outcomes_json_path, 'r') as f:
         outcomes = json.load(f)
     
-    # Map game to cover: key as "HOME vs AWAY"
+    # Map game to cover for quick lookup (use "HOME vs AWAY" as key)
     cover_map = {f"{o['home']} vs {o['away']}": o['cover'] for o in outcomes}
     
-    # Fetch TD scorers for bonus
+    # Fetch TD scorers
     td_scorers = fetch_td_scorers(week, matchups_file)
     
-    # Grade each person
-    weekly_scores = []
+    # Grade each participant (ATS + TD bonus)
+    standings = []
     for _, row in picks_df.iterrows():
-        name = row['Name']
+        username = row['Name']
         correct = 0
-        # Grade 5 ATS picks
         for i in range(1, 6):
             pick_str = row[f'Pick{i}']
-            # Parse: "Pick DAL to cover (-1) vs PHI" -> picked_team = 'DAL', game_str = 'DAL vs PHI' or depending
-            if ' to cover ' in pick_str:
-                parts = pick_str.split(' to cover ')
-                picked_team = parts[0].replace('Pick ', '').strip()
-                rest = parts[1]
-                vs_pos = rest.find(' vs ')
-                spread_str = rest[:vs_pos]  # '(-1)'
-                opponent = rest[vs_pos + 4:].strip()
-                # Determine game key: Try both orders
-                game_key1 = f"{picked_team} vs {opponent}"
-                game_key2 = f"{opponent} vs {picked_team}"
-                actual_cover = cover_map.get(game_key1) or cover_map.get(game_key2)
+            # Parse pick_str, e.g., "PHI @ DAL (+7.0)" or "PHI (-7.0) @ DAL"
+            if ' @ ' in pick_str:
+                parts = pick_str.split(' @ ')
+                away_team = parts[0].strip()
+                home_part = parts[1].strip()
+                if '(' in away_team:
+                    # Spread on away: picking away, e.g., "PHI (-7.0) @ DAL" -> picked = PHI, game = PHI vs DAL
+                    picked_team = away_team.split(' (')[0].strip()
+                    opponent = home_part
+                else:
+                    # Spread on home: picking home, e.g., "PHI @ DAL (+7.0)" -> picked = DAL, game = DAL vs PHI but normalize
+                    picked_team = home_part.split(' (')[0].strip()
+                    opponent = away_team
+                # Game key always home vs away? No, since home/away are fixed, but since away is first, home second
+                # Assume first is away, second is home
+                game_key = f"{away_team.split(' (')[0]} vs {home_part.split(' (')[0]}"
+                actual_cover = cover_map.get(game_key)
                 if actual_cover and picked_team == actual_cover:
                     correct += 1
         
-        # Grade Player TD bonus (1 point if they scored any TD)
-        player_td = row['PlayerTD'].strip()
-        if player_td in td_scorers:
+        # TD bonus
+        player = row['PlayerTD'].strip()
+        if player in td_scorers:
             correct += 1
         
-        weekly_scores.append({'Name': name, 'Week': week, 'Correct': correct})
+        standings.append({'Username': username, 'Correct Picks': correct})
     
-    weekly_df = pd.DataFrame(weekly_scores)
-    
-    # Update cumulative standings
-    if os.path.exists(output_csv_path):
-        standings_df = pd.read_csv(output_csv_path)
-        for _, wrow in weekly_df.iterrows():
-            if wrow['Name'] in standings_df['Name'].values:
-                standings_df.loc[standings_df['Name'] == wrow['Name'], 'Total Correct'] += wrow['Correct']
-            else:
-                new_row = pd.DataFrame({'Name': [wrow['Name']], 'Total Correct': [wrow['Correct']]})
-                standings_df = pd.concat([standings_df, new_row], ignore_index=True)
-    else:
-        standings_df = weekly_df[['Name']].copy()
-        standings_df['Total Correct'] = weekly_df['Correct']
-    
-    # Sort and save
-    standings_df = standings_df.sort_values('Total Correct', ascending=False)
+    # Sort and save (accumulate by loading prior if needed)
+    standings_df = pd.DataFrame(standings).sort_values('Correct Picks', ascending=False)
     standings_df.to_csv(output_csv_path, index=False)
-    print("Standings updated! Open standings.csv to view.")
+    print("Standings saved to", output_csv_path)
 
-# How to use: Set week, JSON files
-week = 1  # Change this
-outcomes_json_path = f'week{week}_outcomes.json'
-matchups_file = f'week{week}_matchups.json'
-grade_picks(week=week, outcomes_json_path=outcomes_json_path, matchups_file=matchups_file)
+# Example usage
+week = 1
+grade_picks(week=week, outcomes_json_path=f'week{week}_outcomes.json', matchups_file=f'week{week}_matchups.json')
