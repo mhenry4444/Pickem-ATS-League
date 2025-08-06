@@ -19,21 +19,19 @@ current_week = 1  # Update manually
 # Load games
 matchups = load_matchups(current_week)
 
-# Create pick options: Two per game, one for each team with spread
+# Create pick options: Two per game, formatted to group them
 pick_options = []
 for g in matchups:
     home = g['home']
     away = g['away']
     home_spread = g['home_spread']
     if home_spread is not None:
-        # Home spread as is (negative if favored)
-        home_str = f"{home} ({home_spread:+}) vs {away}"  # + forces sign
-        # Away spread is negative of home
+        home_str = f"Pick {home} to cover ({home_spread:+}) vs {away}"
         away_spread = -home_spread
-        away_str = f"{away} ({away_spread:+}) vs {home}"
+        away_str = f"Pick {away} to cover ({away_spread:+}) vs {home}"
     else:
-        home_str = f"{home} vs {away} (No spread)"
-        away_str = f"{away} vs {home} (No spread)"
+        home_str = f"Pick {home} to cover vs {away} (No spread)"
+        away_str = f"Pick {away} to cover vs {home} (No spread)"
     pick_options.append(home_str)
     pick_options.append(away_str)
 
@@ -59,7 +57,7 @@ with st.form(key='pick_form'):
         # Prepare data to save
         data = {'Week': current_week, 'Name': name, 'Email': email, 'PlayerTD': player_td}
         for i, pick in enumerate(selected_picks, 1):
-            data[f'Pick{i}'] = pick  # Save full string, e.g., "DAL (-1) vs PHI"
+            data[f'Pick{i}'] = pick  # Save full string, e.g., "Pick DAL to cover (-1) vs PHI"
         
         # Save to picks.csv (creates if not exists)
         df = pd.DataFrame([data])
