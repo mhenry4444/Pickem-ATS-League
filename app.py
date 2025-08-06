@@ -18,7 +18,24 @@ current_week = 1  # Update manually
 
 # Load games
 matchups = load_matchups(current_week)
-game_options = {g['spread_str']: {'home': g['home'], 'away': g['away'], 'clean': f"{g['home']} vs {g['away']}"} for g in matchups}
+
+# Create pick options: Two per game, one for each team with spread
+pick_options = []
+for g in matchups:
+    home = g['home']
+    away = g['away']
+    home_spread = g['home_spread']
+    if home_spread is not None:
+        # Home spread as is (negative if favored)
+        home_str = f"{home} ({home_spread:+}) vs {away}"  # + forces sign
+        # Away spread is negative of home
+        away_spread = -home_spread
+        away_str = f"{away} ({away_spread:+}) vs {home}"
+    else:
+        home_str = f"{home} vs {away} (No spread)"
+        away_str = f"{away} vs {home} (No spread)"
+    pick_options.append(home_str)
+    pick_options.append(away_str)
 
 st.title(f"Football Pick'em League - Week {current_week}")
 
@@ -27,26 +44,22 @@ with st.form(key='pick_form'):
     name = st.text_input("Your Name (type anything)")
     email = st.text_input("Your Email (type your address)")
     
-    # Pick exactly 5 games from dropdown
-    selected_games = st.multiselect("Select EXACTLY 5 Games (spreads shown just for info)", list(game_options.keys()), max_selections=5)
-    if len(selected_games) != 5:
-        st.warning("You must select exactly 5 games to submit.")
+    # Select exactly 5 picks (teams to cover)
+    selected_picks = st.multiselect("Select EXACTLY 5 Teams to Cover the Spread (from any games)", pick_options, max_selections=5)
+    if len(selected_picks) != 5:
+        st.warning("You must select exactly 5 teams to submit.")
     
-    # For each game, choose winner
-    picks = {}
-    for game_str in selected_games:
-        teams = game_options[game_str]
-        pick = st.selectbox(f"Pick the winner for {game_str}", [teams['home'], teams['away'], "No Pick"])
-        picks[game_str] = pick
+    # Player TD picker
+    st.subheader("Pick 1 player to score at least 1 TD")
+    player_td = st.text_input("Player Name (type full name, e.g., Patrick Mahomes)")
     
     submit = st.form_submit_button("Submit My Picks")
     
-    if submit and len(selected_games) == 5 and all(p != "No Pick" for p in picks.values()):
+    if submit and len(selected_picks) == 5 and player_td.strip() != "":
         # Prepare data to save
-        data = {'Week': current_week, 'Name': name, 'Email': email}
-        for i, game in enumerate(selected_games, 1):
-            data[f'Game{i}'] = game_options[game]['clean']  # Save as "HOME vs AWAY"
-            data[f'Pick{i}'] = picks[game]
+        data = {'Week': current_week, 'Name': name, 'Email': email, 'PlayerTD': player_td}
+        for i, pick in enumerate(selected_picks, 1):
+            data[f'Pick{i}'] = pick  # Save full string, e.g., "DAL (-1) vs PHI"
         
         # Save to picks.csv (creates if not exists)
         df = pd.DataFrame([data])
