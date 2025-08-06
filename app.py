@@ -3,7 +3,7 @@ import pandas as pd
 import json
 import os
 
-# Function to load JSON (simple data file)
+# Function to load JSON (game data from fetch_matchups.py)
 def load_matchups(week):
     file = f'week{week}_matchups.json'
     if os.path.exists(file):
@@ -14,36 +14,37 @@ def load_matchups(week):
         return []
 
 # Set the current week (change this each week)
-current_week = 1  # Update manually
+current_week = 1  # Update manually, e.g., 1 for Week 1
 
 # Load games
 matchups = load_matchups(current_week)
 
-# Create pick options: Two per game, always away @ home format, spread on picked team
+# Create pick options: Two per game, away @ home format, spread on picked team, underdog first
 pick_options = []
 for g in matchups:
     home = g['home']
     away = g['away']
     home_spread = g['home_spread']
     if home_spread is not None:
-        away_spread = -home_spread if home_spread else 0
+        away_spread = -home_spread
         # Option for picking home: "{away} @ {home} ({home_spread:+})"
         home_pick_str = f"{away} @ {home} ({home_spread:+})"
         # Option for picking away: "{away} ({away_spread:+}) @ {home}"
         away_pick_str = f"{away} ({away_spread:+}) @ {home}"
     else:
+        # Handle missing spread (treat as pick'em)
         home_pick_str = f"{away} @ {home}"
-        away_pick_str = f"{away} @ {home}"  # Duplicate if no spread, but rare
-
+        away_pick_str = f"{away} @ {home}"
+    
     # Add underdog option first
-    if home_spread > 0:  # Home underdog (away favorite)
-        pick_options.append(home_pick_str)  # Underdog home first
+    if home_spread is None:
         pick_options.append(away_pick_str)
-    elif home_spread < 0:  # Home favorite (away underdog)
-        pick_options.append(away_pick_str)  # Underdog away first
         pick_options.append(home_pick_str)
-    else:  # Pick'em
+    elif home_spread > 0:  # Home is underdog (away favored)
+        pick_options.append(home_pick_str)  # Home (+spread) first
         pick_options.append(away_pick_str)
+    else:  # Away is underdog (home favored) or pick'em (0)
+        pick_options.append(away_pick_str)  # Away (+spread) first
         pick_options.append(home_pick_str)
 
 st.title(f"Football Pick'em League - Week {current_week}")
@@ -53,8 +54,12 @@ with st.form(key='pick_form'):
     name = st.text_input("Your Name (type anything)")
     email = st.text_input("Your Email (type your address)")
     
-    # Select exactly 5 picks (teams to cover)
-    selected_picks = st.multiselect("Select EXACTLY 5 Teams to Cover the Spread (from any games)", pick_options, max_selections=5)
+    # Select exactly 5 teams to cover the spread
+    selected_picks = st.multiselect(
+        "Select EXACTLY 5 Teams to Cover the Spread (from any games)",
+        pick_options,
+        max_selections=5
+    )
     if len(selected_picks) != 5:
         st.warning("You must select exactly 5 teams to submit.")
     
@@ -78,7 +83,7 @@ with st.form(key='pick_form'):
             df.to_csv('picks.csv', index=False)
         st.success("Your picks are submitted! Thanks!")
 
-# Optional button to show standings (after grading)
+# Optional button to show standings
 if st.button("View Current Standings"):
     if os.path.exists('standings.csv'):
         standings = pd.read_csv('standings.csv')
