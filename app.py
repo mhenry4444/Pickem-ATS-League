@@ -29,7 +29,6 @@ def has_duplicate_games(selected_picks):
 
 # Function to get deadline (Sunday 9:15 AM PST of the current week)
 def get_deadline(current_week):
-    # Assume season starts September 5, 2025 (Week 1)
     start_date = datetime(2025, 9, 5, tzinfo=timezone.utc)
     days_to_add = (current_week - 1) * 7
     week_start = start_date + pd.Timedelta(days=days_to_add)
@@ -48,8 +47,7 @@ def compute_weekly_scores(picks_csv_path, outcomes_json_path, matchups_file, wee
             outcomes = json.load(f)
         cover_map = {f"{o['home']} vs {o['away']}": o['cover'] for o in outcomes}
         
-        # Mock TD scorers for testing (replace with real fetch_td_scorers in production)
-        td_scorers = set(['Christian McCaffrey', 'Saquon Barkley', 'Jalen Hurts'])
+        td_scorers = set(['Christian McCaffrey', 'Saquon Barkley', 'Jalen Hurts'])  # Mock for testing
         
         weekly_scores = []
         for _, row in picks_df.iterrows():
@@ -91,6 +89,8 @@ if 'submission_success' not in st.session_state:
     st.session_state['submission_success'] = False
 if 'picks_df' not in st.session_state:
     st.session_state['picks_df'] = None
+if 'admin_authenticated' not in st.session_state:
+    st.session_state['admin_authenticated'] = False
 
 # Set the current week
 current_week = 1  # Update manually each Wednesday
@@ -130,6 +130,13 @@ else:
             pick_options.append(home_pick_str)
 
     st.title(f"Football Pick'em League - Week {current_week}")
+
+    # Admin authentication for download
+    admin_password = st.text_input("Admin Password (leave blank if submitting picks)", type="password")
+    if admin_password == "your_secure_password":  # Replace with your chosen password
+        st.session_state['admin_authenticated'] = True
+    else:
+        st.session_state['admin_authenticated'] = False
 
     # Form for user input
     with st.form(key='pick_form'):
@@ -190,8 +197,8 @@ else:
                 st.session_state['picks_df'] = pd.DataFrame([data])
                 st.success(f"Your picks are submitted locally to {picks_path}! Please upload picks.csv to GitHub to persist changes.")
 
-    # Display download button after successful submission
-    if st.session_state.get('submission_success', False):
+    # Display download button only for admin
+    if st.session_state.get('submission_success', False) and st.session_state.get('admin_authenticated', False):
         if st.session_state['picks_df'] is not None:
             csv_buffer = StringIO()
             st.session_state['picks_df'].to_csv(csv_buffer, index=False)
