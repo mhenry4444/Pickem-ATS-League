@@ -3,6 +3,8 @@ import pandas as pd
 import json
 import os
 from datetime import datetime, timezone, timedelta
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
 
 # Function to load JSON (game data from fetch_matchups.py)
 def load_matchups(week):
@@ -29,12 +31,10 @@ def has_duplicate_games(selected_picks):
 # Function to get deadline (Sunday 9:15 AM PST of the current week)
 def get_deadline(current_week):
     # Assume season starts September 5, 2025 (Week 1)
-    start_date = datetime(2025, 9, 5, tzinfo=timezone.utc)  # UTC time
-    # Calculate the start of the week (Friday before, as per NFL schedule)
+    start_date = datetime(2025, 9, 5, tzinfo=timezone.utc)
     days_to_add = (current_week - 1) * 7
     week_start = start_date + pd.Timedelta(days=days_to_add)
-    # Sunday is 2 days after Friday, 9:15 AM PST is 16:15 UTC
-    deadline = week_start + pd.Timedelta(days=2, hours=16, minutes=15)
+    deadline = week_start + pd.Timedelta(days=2, hours=16, minutes=15)  # Sunday 9:15 AM PST
     return deadline
 
 # Function to compute weekly scores (adapted from grade_picks.py)
@@ -49,7 +49,7 @@ def compute_weekly_scores(picks_csv_path, outcomes_json_path, matchups_file, wee
             outcomes = json.load(f)
         cover_map = {f"{o['home']} vs {o['away']}": o['cover'] for o in outcomes}
         
-        # Mock TD scorers for testing (replace with real fetch_td_scorers in production)
+        # Mock TD scorers for testing
         td_scorers = set(['Christian McCaffrey', 'Saquon Barkley', 'Jalen Hurts'])
         
         weekly_scores = []
@@ -87,6 +87,18 @@ def compute_weekly_scores(picks_csv_path, outcomes_json_path, matchups_file, wee
         print(f"Error computing weekly scores: {e}")
         return pd.DataFrame(columns=['Name', 'Email', f'Week {week}'])
 
+# Google Sheets setup
+def initialize_google_sheets():
+    try:
+        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+        creds = ServiceAccountCredentials.from_json_keyfile_name('credentials.json', scope)
+        client = gspread.authorize(creds)
+        sheet = client.open("Pickem League Picks").sheet1  # Replace with your sheet name
+        return sheet
+    except Exception as e:
+        st.error(f"Google Sheets setup failed: {e}. Falling back to local picks.csv.")
+        return None
+
 # Set the current week
 current_week = 1  # Update manually each Wednesday
 
@@ -100,7 +112,7 @@ current_time = datetime.now(timezone.utc)
 if current_time >= deadline:
     st.error(f"Submissions are closed for Week {current_week}. Deadline was Sunday, {deadline.astimezone(timezone(timedelta(hours=-7))).strftime('%Y-%m-%d %I:%M %p PST')}")
 else:
-    # Create pick options: Two per game, away @ home for pick'em, spread on picked team
+    # Create pick options
     pick_options = []
     for g in matchups:
         home = g['home']
@@ -114,7 +126,6 @@ else:
             home_pick_str = f"{away} @ {home} (Pick)"
             away_pick_str = f"{away} (Pick) @ {home}"
         
-        # Add underdog option first
         if home_spread is None:
             pick_options.append(away_pick_str)
             pick_options.append(home_pick_str)
@@ -132,7 +143,6 @@ else:
         name = st.text_input("Your Name (type anything)")
         email = st.text_input("Your Email (type your address)")
         
-        # Check for existing submission
         existing_picks = None
         if os.path.exists('picks.csv'):
             try:
@@ -145,7 +155,6 @@ else:
             except:
                 pass
         
-        # Select exactly 5 teams to cover the spread
         selected_picks = st.multiselect(
             "Select EXACTLY 5 Teams to Cover the Spread (from any games)",
             pick_options,
@@ -156,35 +165,61 @@ else:
         elif has_duplicate_games(selected_picks):
             st.error("You cannot pick both sides of the same game. Choose 5 different games.")
         
-        # Player TD picker
         st.subheader("Pick 1 player to score at least 1 TD")
         player_td = st.text_input("Player Name (type full name, e.g., Patrick Mahomes)")
         
         submit = st.form_submit_button("Submit My Picks")
         
         if submit and len(selected_picks) == 5 and not has_duplicate_games(selected_picks) and player_td.strip() != "":
-            # Prepare data to save with timestamp
             timestamp = datetime.now(timezone.utc).astimezone(timezone(timedelta(hours=-7))).strftime('%Y-%m-%d %H:%M')
             data = {'Week': current_week, 'Name': name.strip(), 'Email': email.strip(), 'PlayerTD': player_td.strip(), 'Timestamp': timestamp}
             for i, pick in enumerate(selected_picks, 1):
                 data[f'Pick{i}'] = pick
             
-            # Load existing picks or create new DataFrame
-            if os.path.exists('picks.csv'):
-                picks_df = pd.read_csv('picks.csv')
-                # Ensure Timestamp column exists
-                if 'Timestamp' not in picks_df.columns:
-                    picks_df['Timestamp'] = ''
-                # Remove existing picks for this user/week
-                if not existing_picks.empty:
-                    picks_df = picks_df[~((picks_df['Week'] == current_week) & 
-                                        (picks_df['Name'].str.strip() == name.strip()) & 
-                                        (picks_df['Email'].str.strip() == email.strip()))]
-                picks_df = pd.concat([picks_df, pd.DataFrame([data])], ignore_index=True)
-                picks_df.to_csv('picks.csv', index=False)
+            # Initialize Google Sheets
+            sheet = initialize_google_sheets()
+            if sheet:
+                # Save to Google Sheets
+                try:
+                    existing_data = sheet.get_all_records()
+                    df = pd.DataFrame(existing_data) if existing_data else pd.DataFrame(columns=data.keys())
+                    if not df.empty:
+                        df = df[~((df['Week'] == current_week) & 
+                                (df['Name'].str.strip() == name.strip()) & 
+                                (df['Email'].str.strip() == email.strip()))]
+                    df = pd.concat([df, pd.DataFrame([data])], ignore_index=True)
+                    sheet.update([df.columns.values.tolist()] + df.values.tolist())
+                    st.success("Your picks are submitted to Google Sheets! Thanks!")
+                except Exception as e:
+                    st.error(f"Google Sheets update failed: {e}. Falling back to local file.")
+                    if os.path.exists('picks.csv'):
+                        picks_df = pd.read_csv('picks.csv')
+                        if 'Timestamp' not in picks_df.columns:
+                            picks_df['Timestamp'] = ''
+                        if not existing_picks.empty:
+                            picks_df = picks_df[~((picks_df['Week'] == current_week) & 
+                                                (picks_df['Name'].str.strip() == name.strip()) & 
+                                                (picks_df['Email'].str.strip() == email.strip()))]
+                        picks_df = pd.concat([picks_df, pd.DataFrame([data])], ignore_index=True)
+                        picks_df.to_csv('picks.csv', index=False)
+                    else:
+                        pd.DataFrame([data]).to_csv('picks.csv', index=False)
+                    st.success("Your picks are submitted locally! Thanks!")
             else:
-                pd.DataFrame([data]).to_csv('picks.csv', index=False)
-            st.success("Your picks are submitted! Thanks!")
+                # Fallback to local picks.csv
+                if os.path.exists('picks.csv'):
+                    picks_df = pd.read_csv('picks.csv')
+                    if 'Timestamp' not in picks_df.columns:
+                        picks_df['Timestamp'] = ''
+                    if not existing_picks.empty:
+                        picks_df = picks_df[~((picks_df['Week'] == current_week) & 
+                                            (picks_df['Name'].str.strip() == name.strip()) & 
+                                            (picks_df['Email'].str.strip() == email.strip()))]
+                    picks_df = pd.concat([picks_df, pd.DataFrame([data])], ignore_index=True)
+                    picks_df.to_csv('picks.csv', index=False)
+                else:
+                    pd.DataFrame([data]).to_csv('picks.csv', index=False)
+                st.success("Your picks are submitted locally! Thanks!")
 
 # Leaderboard
 if st.button("View Current Standings"):
@@ -210,23 +245,15 @@ if st.button("View Current Standings"):
             for df in weekly_dfs[1:]:
                 leaderboard_df = leaderboard_df.merge(df, on=['Name', 'Email'], how='outer')
             leaderboard_df = leaderboard_df.fillna(0.0)
-            # Add or merge cumulative totals
             if not standings_df.empty:
                 leaderboard_df = leaderboard_df.merge(standings_df[['Name', 'Total Correct']], on='Name', how='outer').fillna(0.0)
             else:
                 leaderboard_df['Total Correct'] = leaderboard_df[[col for col in leaderboard_df.columns if col.startswith('Week ')]].sum(axis=1)
             
-            # Sort by Total Correct descending
             leaderboard_df = leaderboard_df.sort_values('Total Correct', ascending=False).reset_index(drop=True)
-            
-            # Add Rank
             leaderboard_df['Rank'] = leaderboard_df.index + 1
-            
-            # Reorder columns: Rank, Name, Email, weekly columns, Total Correct
             weekly_cols = [col for col in leaderboard_df.columns if col.startswith('Week ')]
             leaderboard_df = leaderboard_df[['Rank', 'Name', 'Email'] + weekly_cols + ['Total Correct']]
-            
-            # Display without index
             st.dataframe(leaderboard_df, hide_index=True)
         else:
             st.info("No standings or weekly scores available. Grade picks first!")
