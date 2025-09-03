@@ -1,1 +1,162 @@
-[]
+[
+    {
+        "game_id": "401772510",
+        "home": "PHI",
+        "away": "DAL",
+        "home_score": 24,
+        "away_score": 20,
+        "winner": "PHI",
+        "home_spread": -7.0,
+        "cover": "Push"
+    },
+    {
+        "game_id": "401772714",
+        "home": "LAC",
+        "away": "KC",
+        "home_score": 27,
+        "away_score": 24,
+        "winner": "LAC",
+        "home_spread": 3.0,
+        "cover": "LAC"
+    },
+    {
+        "game_id": "401772830",
+        "home": "ATL",
+        "away": "TB",
+        "home_score": 17,
+        "away_score": 20,
+        "winner": "TB",
+        "home_spread": -2.5,
+        "cover": "TB"
+    },
+    {
+        "game_id": "401772829",
+        "home": "CLE",
+        "away": "CIN",
+        "home_score": 14,
+        "away_score": 28,
+        "winner": "CIN",
+        "home_spread": 5.5,
+        "cover": "CIN"
+    },
+    {
+        "game_id": "401772719",
+        "home": "IND",
+        "away": "MIA",
+        "home_score": 30,
+        "away_score": 27,
+        "winner": "IND",
+        "home_spread": -1.5,
+        "cover": "IND"
+    },
+    {
+        "game_id": "401772715",
+        "home": "BUF",
+        "away": "BAL",
+        "home_score": 21,
+        "away_score": 18,
+        "winner": "BUF",
+        "home_spread": -1.5,
+        "cover": "BUF"
+    },
+    {
+        "game_id": "401772831",
+        "home": "NO",
+        "away": "ARI",
+        "home_score": 23,
+        "away_score": 16,
+        "winner": "NO",
+        "home_spread": -5.5,
+        "cover": "NO"
+    },
+    {
+        "game_id": "401772832",
+        "home": "NYJ",
+        "away": "PIT",
+        "home_score": 13,
+        "away_score": 10,
+        "winner": "NYJ",
+        "home_spread": 3.0,
+        "cover": "Push"
+    },
+    {
+        "game_id": "401772833",
+        "home": "MIN",
+        "away": "CHI",
+        "home_score": 17,
+        "away_score": 14,
+        "winner": "MIN",
+        "home_spread": -1.5,
+        "cover": "MIN"
+    },
+    {
+        "game_id": "401772834",
+        "home": "HOU",
+        "away": "LAR",
+        "home_score": 20,
+        "away_score": 19,
+        "winner": "HOU",
+        "home_spread": -2.5,
+        "cover": "HOU"
+    },
+    {
+        "game_id": "401772835",
+        "home": "TEN",
+        "away": "DEN",
+        "home_score": 24,
+        "away_score": 21,
+        "winner": "TEN",
+        "home_spread": -7.5,
+        "cover": "TEN"
+    },
+    {
+        "game_id": "401772836",
+        "home": "CAR",
+        "away": "JAX",
+        "home_score": 16,
+        "away_score": 13,
+        "winner": "CAR",
+        "home_spread": -3.0,
+        "cover": "CAR"
+    },
+    {
+        "game_id": "401772837",
+        "home": "SF",
+        "away": "SEA",
+        "home_score": 28,
+        "away_score": 17,
+        "winner": "SF",
+        "home_spread": -2.5,
+        "cover": "SF"
+    },
+    {
+        "game_id": "401772838",
+        "home": "LV",
+        "away": "NE",
+        "home_score": 19,
+        "away_score": 20,
+        "winner": "NE",
+        "home_spread": -3.0,
+        "cover": "NE"
+    },
+    {
+        "game_id": "401772839",
+        "home": "DET",
+        "away": "GB",
+        "home_score": 23,
+        "away_score": 20,
+        "winner": "DET",
+        "home_spread": -1.5,
+        "cover": "DET"
+    },
+    {
+        "game_id": "401772840",
+        "home": "NYG",
+        "away": "WSH",
+        "home_score": 18,
+        "away_score": 15,
+        "winner": "NYG",
+        "home_spread": None,
+        "cover": "No spread"
+    }
+]
