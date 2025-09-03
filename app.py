@@ -130,9 +130,9 @@ else:
         email = st.text_input("Your Email (type your address)")
         
         existing_picks = None
-        if os.path.exists('picks.csv'):
+        if os.path.exists(r'C:\Users\matth\PYTHONTEST\Pickem ATS league\picks.csv'):
             try:
-                picks_df = pd.read_csv('picks.csv')
+                picks_df = pd.read_csv(r'C:\Users\matth\PYTHONTEST\Pickem ATS league\picks.csv')
                 existing_picks = picks_df[(picks_df['Week'] == current_week) & 
                                         (picks_df['Name'].str.strip() == name.strip()) & 
                                         (picks_df['Email'].str.strip() == email.strip())]
@@ -162,9 +162,10 @@ else:
             for i, pick in enumerate(selected_picks, 1):
                 data[f'Pick{i}'] = pick
             
-            # Save to local picks.csv
-            if os.path.exists('picks.csv'):
-                picks_df = pd.read_csv('picks.csv')
+            # Save to specified local path
+            picks_path = r'C:\Users\matth\PYTHONTEST\Pickem ATS league\picks.csv'
+            if os.path.exists(picks_path):
+                picks_df = pd.read_csv(picks_path)
                 if 'Timestamp' not in picks_df.columns:
                     picks_df['Timestamp'] = ''
                 if not existing_picks.empty:
@@ -172,24 +173,24 @@ else:
                                         (picks_df['Name'].str.strip() == name.strip()) & 
                                         (picks_df['Email'].str.strip() == email.strip()))]
                 picks_df = pd.concat([picks_df, pd.DataFrame([data])], ignore_index=True)
-                picks_df.to_csv('picks.csv', index=False)
+                picks_df.to_csv(picks_path, index=False)
             else:
-                pd.DataFrame([data]).to_csv('picks.csv', index=False)
+                pd.DataFrame([data]).to_csv(picks_path, index=False)
             st.success("Your picks are submitted locally! Please upload picks.csv to GitHub to persist changes.")
 
 # Leaderboard
 if st.button("View Current Standings"):
-    if os.path.exists('picks.csv'):
+    if os.path.exists(r'C:\Users\matth\PYTHONTEST\Pickem ATS league\picks.csv'):
         standings_df = pd.read_csv('standings.csv') if os.path.exists('standings.csv') else pd.DataFrame(columns=['Name', 'Total Correct'])
         
-        picks_df = pd.read_csv('picks.csv')
+        picks_df = pd.read_csv(r'C:\Users\matth\PYTHONTEST\Pickem ATS league\picks.csv')
         weeks = sorted(picks_df['Week'].unique())
         weekly_dfs = []
         for week in weeks:
             outcomes_file = f'week{week}_outcomes.json'
             matchups_file = f'week{week}_matchups.json'
             if os.path.exists(outcomes_file) and os.path.exists(matchups_file):
-                weekly_df = compute_weekly_scores('picks.csv', outcomes_file, matchups_file, week)
+                weekly_df = compute_weekly_scores(r'C:\Users\matth\PYTHONTEST\Pickem ATS league\picks.csv', outcomes_file, matchups_file, week)
                 if not weekly_df.empty:
                     weekly_dfs.append(weekly_df)
         
