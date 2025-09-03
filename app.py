@@ -134,7 +134,7 @@ else:
 
     # Admin authentication for download
     admin_password = st.text_input("Admin Password (leave blank if submitting picks)", type="password")
-    if admin_password == "your_secure_password":  # Replace with your chosen password
+    if admin_password == "Lock$3421":  # Replace with your chosen password
         st.session_state['admin_authenticated'] = True
     else:
         st.session_state['admin_authenticated'] = False
@@ -241,3 +241,4 @@ if st.button("View Current Standings"):
             st.info("No standings or weekly scores available. Grade picks first!")
     else:
         st.info("No picks yet. Submit picks and grade them!")
+
