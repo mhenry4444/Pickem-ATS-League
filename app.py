@@ -26,13 +26,16 @@ def has_duplicate_games(selected_picks):
             games.append(game)
     return len(games) != len(set(games))
 
-# Function to check if submissions are still open
-def is_submission_open(matchups, current_time):
-    for game in matchups:
-        game_time = datetime.strptime(game['date'], '%Y-%m-%d %H:%M').replace(tzinfo=timezone.utc)
-        if current_time >= game_time:
-            return False
-    return True
+# Function to get deadline (Sunday 9:15 AM PST of the current week)
+def get_deadline(current_week):
+    # Assume season starts September 5, 2025 (Week 1)
+    start_date = datetime(2025, 9, 5, tzinfo=timezone.utc)  # UTC time
+    # Calculate the start of the week (Friday before, as per NFL schedule)
+    days_to_add = (current_week - 1) * 7
+    week_start = start_date + pd.Timedelta(days=days_to_add)
+    # Sunday is 2 days after Friday, 9:15 AM PST is 16:15 UTC
+    deadline = week_start + pd.Timedelta(days=2, hours=16, minutes=15)
+    return deadline
 
 # Function to compute weekly scores (adapted from grade_picks.py)
 def compute_weekly_scores(picks_csv_path, outcomes_json_path, matchups_file, week):
@@ -47,7 +50,7 @@ def compute_weekly_scores(picks_csv_path, outcomes_json_path, matchups_file, wee
         cover_map = {f"{o['home']} vs {o['away']}": o['cover'] for o in outcomes}
         
         # Mock TD scorers for testing (replace with real fetch_td_scorers in production)
-        td_scorers = set(['Christian McCaffrey', 'Saquon Barkley', 'Jalen Hurts'])  # Adjust based on mock or real data
+        td_scorers = set(['Christian McCaffrey', 'Saquon Barkley', 'Jalen Hurts'])
         
         weekly_scores = []
         for _, row in picks_df.iterrows():
@@ -85,15 +88,17 @@ def compute_weekly_scores(picks_csv_path, outcomes_json_path, matchups_file, wee
         return pd.DataFrame(columns=['Name', 'Email', f'Week {week}'])
 
 # Set the current week
-current_week = 1  # Update manually
+current_week = 1  # Update manually each Wednesday
 
 # Load games
 matchups = load_matchups(current_week)
 
-# Check submission deadline
+# Calculate deadline
+deadline = get_deadline(current_week)
 current_time = datetime.now(timezone.utc)
-if not is_submission_open(matchups, current_time):
-    st.error("Submissions are closed for this week. The first game has started.")
+
+if current_time >= deadline:
+    st.error(f"Submissions are closed for Week {current_week}. Deadline was Sunday, {deadline.astimezone(timezone(timedelta(hours=-7))).strftime('%Y-%m-%d %I:%M %p PST')}")
 else:
     # Create pick options: Two per game, away @ home for pick'em, spread on picked team
     pick_options = []
@@ -111,7 +116,7 @@ else:
         
         # Add underdog option first
         if home_spread is None:
-            pick_options.append(away_pick_str)  # Pick away first
+            pick_options.append(away_pick_str)
             pick_options.append(home_pick_str)
         elif home_spread > 0:
             pick_options.append(home_pick_str)
@@ -136,7 +141,7 @@ else:
                                         (picks_df['Name'].str.strip() == name.strip()) & 
                                         (picks_df['Email'].str.strip() == email.strip())]
                 if not existing_picks.empty:
-                    st.warning("You already submitted picks for this week. Submitting again will override your previous picks.")
+                    st.warning("You already submitted picks for this week. Submitting again will override your previous picks and update the timestamp.")
             except:
                 pass
         
@@ -158,14 +163,19 @@ else:
         submit = st.form_submit_button("Submit My Picks")
         
         if submit and len(selected_picks) == 5 and not has_duplicate_games(selected_picks) and player_td.strip() != "":
-            # Prepare data to save
-            data = {'Week': current_week, 'Name': name.strip(), 'Email': email.strip(), 'PlayerTD': player_td.strip()}
+            # Prepare data to save with timestamp
+            timestamp = datetime.now(timezone.utc).astimezone(timezone(timedelta(hours=-7))).strftime('%Y-%m-%d %H:%M')
+            data = {'Week': current_week, 'Name': name.strip(), 'Email': email.strip(), 'PlayerTD': player_td.strip(), 'Timestamp': timestamp}
             for i, pick in enumerate(selected_picks, 1):
                 data[f'Pick{i}'] = pick
             
             # Load existing picks or create new DataFrame
             if os.path.exists('picks.csv'):
                 picks_df = pd.read_csv('picks.csv')
+                # Ensure Timestamp column exists
+                if 'Timestamp' not in picks_df.columns:
+                    picks_df['Timestamp'] = ''
+                # Remove existing picks for this user/week
                 if not existing_picks.empty:
                     picks_df = picks_df[~((picks_df['Week'] == current_week) & 
                                         (picks_df['Name'].str.strip() == name.strip()) & 
@@ -216,7 +226,8 @@ if st.button("View Current Standings"):
             weekly_cols = [col for col in leaderboard_df.columns if col.startswith('Week ')]
             leaderboard_df = leaderboard_df[['Rank', 'Name', 'Email'] + weekly_cols + ['Total Correct']]
             
-            st.dataframe(leaderboard_df)
+            # Display without index
+            st.dataframe(leaderboard_df, hide_index=True)
         else:
             st.info("No standings or weekly scores available. Grade picks first!")
     else:
