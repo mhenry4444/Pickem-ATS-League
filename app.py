@@ -3,7 +3,7 @@ import pandas as pd
 import json
 import os
 from datetime import datetime, timezone, timedelta
-from io import StringIO  # Added for download buffer
+from io import StringIO
 
 # Function to load JSON (game data from fetch_matchups.py)
 def load_matchups(week):
@@ -85,6 +85,12 @@ def compute_weekly_scores(picks_csv_path, outcomes_json_path, matchups_file, wee
     except Exception as e:
         print(f"Error computing weekly scores: {e}")
         return pd.DataFrame(columns=['Name', 'Email', f'Week {week}'])
+
+# Initialize session state for download
+if 'submission_success' not in st.session_state:
+    st.session_state['submission_success'] = False
+if 'picks_df' not in st.session_state:
+    st.session_state['picks_df'] = None
 
 # Set the current week
 current_week = 1  # Update manually each Wednesday
@@ -175,19 +181,22 @@ else:
                                         (picks_df['Email'].str.strip() == email.strip()))]
                 picks_df = pd.concat([picks_df, pd.DataFrame([data])], ignore_index=True)
                 picks_df.to_csv(picks_path, index=False)
+                st.session_state['submission_success'] = True
+                st.session_state['picks_df'] = picks_df
                 st.success(f"Your picks are submitted locally to {picks_path}! Please upload picks.csv to GitHub to persist changes.")
-                # Offer download for cloud users
-                csv_buffer = StringIO()
-                picks_df.to_csv(csv_buffer, index=False)
-                st.download_button(label="Download picks.csv", data=csv_buffer.getvalue(), file_name="picks.csv", mime="text/csv")
             else:
                 pd.DataFrame([data]).to_csv(picks_path, index=False)
+                st.session_state['submission_success'] = True
+                st.session_state['picks_df'] = pd.DataFrame([data])
                 st.success(f"Your picks are submitted locally to {picks_path}! Please upload picks.csv to GitHub to persist changes.")
-                # Offer download for cloud users
-                df = pd.DataFrame([data])
-                csv_buffer = StringIO()
-                df.to_csv(csv_buffer, index=False)
-                st.download_button(label="Download picks.csv", data=csv_buffer.getvalue(), file_name="picks.csv", mime="text/csv")
+
+    # Display download button after successful submission
+    if st.session_state.get('submission_success', False):
+        if st.session_state['picks_df'] is not None:
+            csv_buffer = StringIO()
+            st.session_state['picks_df'].to_csv(csv_buffer, index=False)
+            st.download_button(label="Download picks.csv", data=csv_buffer.getvalue(), file_name="picks.csv", mime="text/csv")
+        st.session_state['submission_success'] = False  # Reset after download option is shown
 
 # Leaderboard
 if st.button("View Current Standings"):
