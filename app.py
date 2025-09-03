@@ -36,13 +36,12 @@ def get_deadline(current_week):
     return deadline
 
 # Function to compute weekly scores
-def compute_weekly_scores(picks_csv_path, outcomes_json_path, matchups_file, week):
+def compute_weekly_scores(picks_df, outcomes_json_path, matchups_file, week):
+    picks_df = picks_df[picks_df['Week'] == week]
+    if picks_df.empty:
+        return pd.DataFrame(columns=['Name', 'Email', f'Week {week}'])
+    
     try:
-        picks_df = pd.read_csv(picks_csv_path)
-        picks_df = picks_df[picks_df['Week'] == week]
-        if picks_df.empty:
-            return pd.DataFrame(columns=['Name', 'Email', f'Week {week}'])
-        
         with open(outcomes_json_path, 'r') as f:
             outcomes = json.load(f)
         cover_map = {f"{o['home']} vs {o['away']}": o['cover'] for o in outcomes}
@@ -52,10 +51,10 @@ def compute_weekly_scores(picks_csv_path, outcomes_json_path, matchups_file, wee
         weekly_scores = []
         for _, row in picks_df.iterrows():
             name = row['Name']
-            email = row['Email']
+            email = row['Email'] if 'Email' in row else ''
             correct = 0.0
             for i in range(1, 6):
-                pick_str = row[f'Pick{i}']
+                pick_str = row.get(f'Pick{i}', '')
                 if ' @ ' in pick_str:
                     parts = pick_str.split(' @ ')
                     first_team = parts[0].strip()
@@ -71,12 +70,12 @@ def compute_weekly_scores(picks_csv_path, outcomes_json_path, matchups_file, wee
                     game_key = f"{opponent} vs {picked_team}" if '(' in first_team else f"{picked_team} vs {opponent}"
                     actual_cover = cover_map.get(game_key)
                     if actual_cover:
-                        if actual_cover == "Push" and spread == 0.0:  # Handle pick'em as 0-point spread
+                        if actual_cover == "Push" and spread == 0.0:  # Handle pick'em
                             correct += 0.5
                         elif picked_team == actual_cover:
                             correct += 1.0
             
-            player_td = row['PlayerTD'].strip()
+            player_td = row.get('PlayerTD', '').strip()
             if player_td in td_scorers:
                 correct += 1.0
             
@@ -215,7 +214,7 @@ if st.button("View Current Standings"):
         standings_df = pd.read_csv('standings.csv', index_col=False) if os.path.exists('standings.csv') else pd.DataFrame(columns=['Name', 'Total Correct'])
         picks_df = pd.read_csv(r'C:\Users\matth\PYTHONTEST\Pickem ATS league\picks.csv', index_col=False)
         
-        # Get unique Name and Email from picks
+        # Get unique names and emails from picks.csv
         name_email_df = picks_df[['Name', 'Email']].drop_duplicates()
         
         # Compute weekly scores
@@ -225,34 +224,39 @@ if st.button("View Current Standings"):
             outcomes_file = f'week{week}_outcomes.json'
             matchups_file = f'week{week}_matchups.json'
             if os.path.exists(outcomes_file) and os.path.exists(matchups_file):
-                weekly_df = compute_weekly_scores(r'C:\Users\matth\PYTHONTEST\Pickem ATS league\picks.csv', outcomes_file, matchups_file, week)
+                weekly_df = compute_weekly_scores(picks_df, outcomes_file, matchups_file, week)
                 if not weekly_df.empty:
                     weekly_dfs.append(weekly_df)
         
-        # Initialize leaderboard
+        # Initialize leaderboard with picks data
+        leaderboard_df = name_email_df.copy()
         if weekly_dfs:
-            leaderboard_df = weekly_dfs[0]
-            for df in weekly_dfs[1:]:
-                leaderboard_df = leaderboard_df.merge(df, on=['Name', 'Email'], how='outer')
-            leaderboard_df = leaderboard_df.fillna(0.0)
+            # Merge all weekly scores
+            for df in weekly_dfs:
+                leaderboard_df = leaderboard_df.merge(df, on=['Name', 'Email'], how='left', suffixes=('', f'_{week}'))
+            # Sum weekly scores into a single 'Week X' column if multiple weeks exist
+            weekly_cols = [col for col in leaderboard_df.columns if col.startswith('Week ')]
+            if len(weekly_cols) > 1:
+                leaderboard_df['Week 1'] = leaderboard_df[weekly_cols].sum(axis=1)
+                for col in weekly_cols[1:]:
+                    leaderboard_df = leaderboard_df.drop(columns=[col])
+            else:
+                leaderboard_df['Week 1'] = leaderboard_df.get('Week 1', 0.0)
         else:
-            # If no weekly scores, start with picks data
-            leaderboard_df = name_email_df.copy()
-            leaderboard_df['Week 1'] = 0.0  # Default to 0 if no outcomes
+            leaderboard_df['Week 1'] = 0.0  # Default if no outcomes
 
-        # Merge with standings on Name
+        # Merge with standings for Total Correct
         if not standings_df.empty:
             leaderboard_df = leaderboard_df.merge(standings_df[['Name', 'Total Correct']], on='Name', how='left').fillna({'Total Correct': 0.0})
         else:
-            leaderboard_df['Total Correct'] = leaderboard_df[[col for col in leaderboard_df.columns if col.startswith('Week ')]].sum(axis=1)
-        
+            leaderboard_df['Total Correct'] = leaderboard_df['Week 1']  # Default if no standings
+
         # Sort by Total Correct descending
         leaderboard_df = leaderboard_df.sort_values('Total Correct', ascending=False).reset_index(drop=True)
         leaderboard_df['Rank'] = leaderboard_df.index + 1
         
-        # Reorder columns: Rank, Name, Email, weekly columns, Total Correct
-        weekly_cols = [col for col in leaderboard_df.columns if col.startswith('Week ')]
-        leaderboard_df = leaderboard_df[['Rank', 'Name', 'Email'] + weekly_cols + ['Total Correct']]
+        # Reorder columns
+        leaderboard_df = leaderboard_df[['Rank', 'Name', 'Email', 'Week 1', 'Total Correct']]
         
         # Display
         st.dataframe(leaderboard_df, hide_index=True)
