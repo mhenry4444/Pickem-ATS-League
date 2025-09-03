@@ -76,20 +76,18 @@ def grade_picks(picks_csv_path='picks.csv', outcomes_json_path=None, matchups_fi
     
     # Map game to cover: key as "HOME vs AWAY"
     cover_map = {f"{o['home']} vs {o['away']}": o['cover'] for o in outcomes}
-    # Apply manual overrides
     for game_key, cover in override_covers.items():
         cover_map[game_key] = cover
     
     # Fetch TD scorers for bonus
     td_scorers = fetch_td_scorers(week, matchups_file)
-    # Apply manual TD overrides
     td_scorers.update(override_td_scorers)
     
     # Grade each person
     weekly_scores = []
     for _, row in picks_df.iterrows():
         name = row['Name']
-        correct = 0
+        correct = 0.0  # Use float for 0.5 point pushes
         # Grade 5 ATS picks
         for i in range(1, 6):
             pick_str = row[f'Pick{i}']
@@ -108,14 +106,15 @@ def grade_picks(picks_csv_path='picks.csv', outcomes_json_path=None, matchups_fi
                 game_key = f"{opponent} vs {picked_team}" if '(' in first_team else f"{picked_team} vs {opponent}"
                 actual_cover = cover_map.get(game_key)
                 if actual_cover and picked_team == actual_cover:
-                    correct += 1
+                    correct += 1.0  # Correct pick
                 elif actual_cover == "Push":
-                    pass  # No point for push
+                    correct += 0.5  # Push
+                # Else: Incorrect pick, 0 points
         
         # Grade Player TD bonus
         player_td = row['PlayerTD'].strip()
         if player_td in td_scorers:
-            correct += 1
+            correct += 1.0
         
         weekly_scores.append({'Name': name, 'Week': week, 'Correct': correct})
     
