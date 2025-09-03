@@ -1,0 +1,21 @@
+Week,Name,Email,Pick1,Pick2,Pick3,Pick4,Pick5,PlayerTD
+1,Matt,matt@example.com,PHI @ DAL (+7.0),KC @ LAC (+3.0),ATL @ TB (+2.5),CLE @ CIN (+5.5),IND @ MIA (-1.5),Christian McCaffrey
+1,John,john@example.com,PHI (-7.0) @ DAL,NO @ ARI (+5.5),JAX @ CAR (-3.0),BUF @ BAL (-1.5),DEN @ TEN (-7.5),Saquon Barkley
+1,Emma,emma@example.com,DAL (+7.0) @ PHI,KC @ LAC (+3.0),NYJ @ PIT (+3.0),WSH @ NYG,CHI @ MIN (+1.5),Jalen Hurts
+1,Alex,alex@example.com,PHI @ DAL (+7.0),LAC (-3.0) @ KC,SEA @ SF (+2.5),GB @ DET (-1.5),LAR @ HOU (-2.5),Tyreek Hill
+1,Sarah,sarah@example.com,PHI (-7.0) @ DAL,TB (-2.5) @ ATL,CIN (-5.5) @ CLE,NE @ LV (-3.0),CHI @ MIN (+1.5),Justin Jefferson
+1,Tom,tom@example.com,ARI (-5.5) @ NO,PIT (-3.0) @ NYJ,JAX @ CAR (-3.0),TEN (+7.5) @ DEN,BUF @ BAL (-1.5),Josh Jacobs
+1,Lisa,lisa@example.com,PHI @ DAL (+7.0),KC @ LAC (+3.0),ATL @ TB (+2.5),NYG @ WSH,MIN (-1.5) @ CHI,Patrick Mahomes
+1,Mike,mike@example.com,DAL (+7.0) @ PHI,LAC (-3.0) @ KC,SF (-2.5) @ SEA,DET (+1.5) @ GB,HOU (+2.5) @ LAR,CeeDee Lamb
+1,Anna,anna@example.com,PHI (-7.0) @ DAL,CAR (+3.0) @ JAX,NE @ LV (-3.0),BAL (+1.5) @ BUF,CHI @ MIN (+1.5),Davante Adams
+1,Ben,ben@example.com,NO @ ARI (+5.5),NYJ @ PIT (+3.0),WSH @ NYG,SF @ SEA (+2.5),DEN @ TEN (-7.5),Travis Kelce
+1,Chris,chris@example.com,PHI @ DAL (+7.0),KC @ LAC (+3.0),TB (-2.5) @ ATL,CIN (-5.5) @ CLE,IND @ MIA (-1.5),Stefon Diggs
+1,David,david@example.com,DAL (+7.0) @ PHI,LAC (-3.0) @ KC,ATL @ TB (+2.5),CLE @ CIN (+5.5),BUF @ BAL (-1.5),Cooper Kupp
+1,Eva,eva@example.com,PHI (-7.0) @ DAL,NO @ ARI (+5.5),JAX @ CAR (-3.0),NYG @ WSH,CHI @ MIN (+1.5),Alvin Kamara
+1,Frank,frank@example.com,ARI (-5.5) @ NO,PIT (-3.0) @ NYJ,SEA @ SF (+2.5),DET (+1.5) @ GB,LAR @ HOU (-2.5),A.J. Brown
+1,Grace,grace@example.com,PHI @ DAL (+7.0),KC @ LAC (+3.0),TB (-2.5) @ ATL,NE @ LV (-3.0),MIN (-1.5) @ CHI,Joe Mixon
+1,Harry,harry@example.com,DAL (+7.0) @ PHI,CAR (+3.0) @ JAX,NYJ @ PIT (+3.0),BAL (+1.5) @ BUF,TEN (+7.5) @ DEN,Ja'Marr Chase
+1,Ivy,ivy@example.com,PHI (-7.0) @ DAL,NO @ ARI (+5.5),CIN (-5.5) @ CLE,IND @ MIA (-1.5),CHI @ MIN (+1.5),Derrick Henry
+1,Jack,jack@example.com,PHI @ DAL (+7.0),LAC (-3.0) @ KC,ATL @ TB (+2.5),WSH @ NYG,SF @ SEA (+2.5),DeVonta Smith
+1,Kate,kate@example.com,DAL (+7.0) @ PHI,KC @ LAC (+3.0),TB (-2.5) @ ATL,CLE @ CIN (+5.5),DEN @ TEN (-7.5),Bijan Robinson
+1,Leo,leo@example.com,PHI (-7.0) @ DAL,NO @ ARI (+5.5),JAX @ CAR (-3.0),BUF @ BAL (-1.5),CHI @ MIN (+1.5),Aaron Jones
