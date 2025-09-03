@@ -1,136 +1,149 @@
-import streamlit as st
 import pandas as pd
 import json
-import os
-from datetime import datetime, timezone
+import requests
 
-# Function to load JSON (game data from fetch_matchups.py)
-def load_matchups(week):
-    file = f'week{week}_matchups.json'
-    if os.path.exists(file):
-        with open(file, 'r') as f:
-            return json.load(f)
-    else:
-        st.error(f"Missing file: {file}. Run fetch_matchups.py first!")
-        return []
-
-# Function to check for duplicate games in picks
-def has_duplicate_games(selected_picks):
-    games = []
-    for pick in selected_picks:
-        if ' @ ' in pick:
-            parts = pick.split(' @ ')
-            away = parts[0].split(' (')[0].strip()
-            home = parts[1].split(' (')[0].strip()
-            game = f"{away} @ {home}"
-            games.append(game)
-    return len(games) != len(set(games))
-
-# Function to check if submissions are still open
-def is_submission_open(matchups, current_time):
-    for game in matchups:
-        game_time = datetime.strptime(game['date'], '%Y-%m-%d %H:%M').replace(tzinfo=timezone.utc)
-        if current_time >= game_time:
-            return False  # First game started
-    return True
-
-# Set the current week (change this each week)
-current_week = 1  # Update manually, e.g., 1 for Week 1
-
-# Load games
-matchups = load_matchups(current_week)
-
-# Check submission deadline
-current_time = datetime.now(timezone.utc)
-if not is_submission_open(matchups, current_time):
-    st.error("Submissions are closed for this week. The first game has started.")
-else:
-    # Create pick options: Two per game, away @ home format, spread on picked team, underdog first
-    pick_options = []
-    for g in matchups:
-        home = g['home']
-        away = g['away']
-        home_spread = g['home_spread']
-        if home_spread is not None:
-            away_spread = -home_spread
-            home_pick_str = f"{away} @ {home} ({home_spread:+})"
-            away_pick_str = f"{away} ({away_spread:+}) @ {home}"
-        else:
-            home_pick_str = f"{away} @ {home}"
-            away_pick_str = f"{away} @ {home}"
+def fetch_td_scorers(week, matchups_file):
+    try:
+        with open(matchups_file, 'r') as f:
+            matchups = json.load(f)
+    except FileNotFoundError:
+        print(f"Error: {matchups_file} not found.")
+        return set()
+    
+    game_ids = [g['game_id'] for g in matchups]
+    
+    td_scorers = set()
+    for game_id in game_ids:
+        url = f"https://site.api.espn.com/apis/site/v2/sports/football/nfl/summary?event={game_id}"
+        response = requests.get(url)
+        if response.status_code != 200:
+            print(f"Error fetching boxscore for {game_id}: {response.status_code}")
+            continue
+        data = response.json()
+        if 'boxscore' not in data or 'players' not in data['boxscore']:
+            continue
         
-        # Add underdog option first
-        if home_spread is None:
-            pick_options.append(away_pick_str)
-            pick_options.append(home_pick_str)
-        elif home_spread > 0:  # Home is underdog
-            pick_options.append(home_pick_str)
-            pick_options.append(away_pick_str)
-        else:  # Away is underdog or pick'em
-            pick_options.append(away_pick_str)
-            pick_options.append(home_pick_str)
+        for team_players in data['boxscore']['players']:
+            for stat_category in team_players['statistics']:
+                if 'athletes' in stat_category:
+                    for athlete in stat_category['athletes']:
+                        stats = {k: v for k, v in zip(stat_category['keys'], athlete['stats'])}
+                        td_keys = ['passingTouchdowns', 'rushingTouchdowns', 'receivingTouchdowns']
+                        for key in td_keys:
+                            if key in stats and int(stats[key]) > 0:
+                                td_scorers.add(athlete['athlete']['displayName'])
+                                break
+    return td_scorers
 
-    st.title(f"Football Pick'em League - Week {current_week}")
-
-    # Form for user input
-    with st.form(key='pick_form'):
-        name = st.text_input("Your Name (type anything)")
-        email = st.text_input("Your Email (type your address)")
+def grade_picks(picks_csv_path='picks.csv', outcomes_json_path=None, matchups_file=None, override_json_path=None, week=None, output_csv_path='standings.csv'):
+    # Load picks from CSV
+    try:
+        picks_df = pd.read_csv(picks_csv_path)
+    except FileNotFoundError:
+        print(f"Error: {picks_csv_path} not found. Make sure friends submitted picks via the app.")
+        return
+    
+    if week is None or outcomes_json_path is None or matchups_file is None:
+        print("Error: Provide week, outcomes_json_path, and matchups_file.")
+        return
+    
+    # Filter to this week
+    picks_df = picks_df[picks_df['Week'] == week]
+    if picks_df.empty:
+        print(f"No picks found for Week {week}.")
+        return
+    
+    # Load outcomes JSON for ATS covers
+    try:
+        with open(outcomes_json_path, 'r') as f:
+            outcomes = json.load(f)
+    except FileNotFoundError:
+        print(f"Error: {outcomes_json_path} not found. Run fetch_scores.py first.")
+        return
+    
+    # Load manual overrides if provided
+    override_covers = {}
+    override_td_scorers = set()
+    if override_json_path and os.path.exists(override_json_path):
+        try:
+            with open(override_json_path, 'r') as f:
+                overrides = json.load(f)
+            override_covers = overrides.get('covers', {})
+            override_td_scorers = set(overrides.get('td_scorers', []))
+            print(f"Loaded overrides from {override_json_path}: {len(override_covers)} covers, {len(override_td_scorers)} TD scorers")
+        except:
+            print(f"Error: Invalid {override_json_path}. Using API data only.")
+    
+    # Map game to cover: key as "HOME vs AWAY"
+    cover_map = {f"{o['home']} vs {o['away']}": o['cover'] for o in outcomes}
+    for game_key, cover in override_covers.items():
+        cover_map[game_key] = cover
+    
+    # Fetch TD scorers for bonus
+    td_scorers = fetch_td_scorers(week, matchups_file)
+    td_scorers.update(override_td_scorers)
+    
+    # Grade each person
+    weekly_scores = []
+    for _, row in picks_df.iterrows():
+        name = row['Name']
+        correct = 0.0  # Use float for 0.5 point pushes
+        # Grade 5 ATS picks
+        for i in range(1, 6):
+            pick_str = row[f'Pick{i}']
+            if ' @ ' in pick_str:
+                parts = pick_str.split(' @ ')
+                first_team = parts[0].strip()
+                second_part = parts[1].strip()
+                if '(' in first_team:
+                    # Picking away, e.g., "PHI (-7.0) @ DAL"
+                    picked_team = first_team.split(' (')[0].strip()
+                    opponent = second_part
+                else:
+                    # Picking home, e.g., "PHI @ DAL (+7.0)"
+                    picked_team = second_part.split(' (')[0].strip()
+                    opponent = first_team
+                game_key = f"{opponent} vs {picked_team}" if '(' in first_team else f"{picked_team} vs {opponent}"
+                actual_cover = cover_map.get(game_key)
+                if actual_cover and picked_team == actual_cover:
+                    correct += 1.0  # Correct pick
+                elif actual_cover == "Push":
+                    correct += 0.5  # Push
+                # Else: Incorrect pick, 0 points
         
-        # Check for existing submission
-        existing_picks = None
-        if os.path.exists('picks.csv'):
-            try:
-                picks_df = pd.read_csv('picks.csv')
-                existing_picks = picks_df[(picks_df['Week'] == current_week) & 
-                                        (picks_df['Name'].str.strip() == name.strip()) & 
-                                        (picks_df['Email'].str.strip() == email.strip())]
-                if not existing_picks.empty:
-                    st.warning("You already submitted picks for this week. Submitting again will override your previous picks.")
-            except:
-                pass
+        # Grade Player TD bonus
+        player_td = row['PlayerTD'].strip()
+        if player_td in td_scorers:
+            correct += 1.0
         
-        # Select exactly 5 teams to cover the spread
-        selected_picks = st.multiselect(
-            "Select EXACTLY 5 Teams to Cover the Spread (from any games)",
-            pick_options,
-            max_selections=5
-        )
-        if len(selected_picks) != 5:
-            st.warning("You must select exactly 5 teams to submit.")
-        elif has_duplicate_games(selected_picks):
-            st.error("You cannot pick both sides of the same game. Choose 5 different games.")
-        
-        # Player TD picker
-        st.subheader("Pick 1 player to score at least 1 TD")
-        player_td = st.text_input("Player Name (type full name, e.g., Patrick Mahomes)")
-        
-        submit = st.form_submit_button("Submit My Picks")
-        
-        if submit and len(selected_picks) == 5 and not has_duplicate_games(selected_picks) and player_td.strip() != "":
-            # Prepare data to save
-            data = {'Week': current_week, 'Name': name.strip(), 'Email': email.strip(), 'PlayerTD': player_td.strip()}
-            for i, pick in enumerate(selected_picks, 1):
-                data[f'Pick{i}'] = pick
-            
-            # Load existing picks or create new DataFrame
-            if os.path.exists('picks.csv'):
-                picks_df = pd.read_csv('picks.csv')
-                # Remove existing picks for this user/week
-                if not existing_picks.empty:
-                    picks_df = picks_df[~((picks_df['Week'] == current_week) & 
-                                        (picks_df['Name'].str.strip() == name.strip()) & 
-                                        (picks_df['Email'].str.strip() == email.strip()))]
-                picks_df = pd.concat([picks_df, pd.DataFrame([data])], ignore_index=True)
-                picks_df.to_csv('picks.csv', index=False)
+        weekly_scores.append({'Name': name, 'Week': week, 'Correct': correct})
+    
+    weekly_df = pd.DataFrame(weekly_scores)
+    
+    # Update cumulative standings
+    if os.path.exists(output_csv_path):
+        try:
+            standings_df = pd.read_csv(output_csv_path)
+        except:
+            standings_df = pd.DataFrame(columns=['Name', 'Total Correct'])
+        for _, wrow in weekly_df.iterrows():
+            if wrow['Name'] in standings_df['Name'].values:
+                standings_df.loc[standings_df['Name'] == wrow['Name'], 'Total Correct'] += wrow['Correct']
             else:
-                pd.DataFrame([data]).to_csv('picks.csv', index=False)
-            st.success("Your picks are submitted! Thanks!")
-
-# Optional button to show standings
-if st.button("View Current Standings"):
-    if os.path.exists('standings.csv'):
-        standings = pd.read_csv('standings.csv')
-        st.dataframe(standings)
+                new_row = pd.DataFrame({'Name': [wrow['Name']], 'Total Correct': [wrow['Correct']]})
+                standings_df = pd.concat([standings_df, new_row], ignore_index=True)
     else:
-        st.info("No standings yet. Grade the picks first!")
+        standings_df = weekly_df[['Name']].copy()
+        standings_df['Total Correct'] = weekly_df['Correct']
+    
+    # Sort and save
+    standings_df = standings_df.sort_values('Total Correct', ascending=False)
+    standings_df.to_csv(output_csv_path, index=False)
+    print(f"Standings updated! Open {output_csv_path} to view.")
+
+# How to use: Set week and JSON files
+week = 1  # Change this
+outcomes_json_path = f'week{week}_outcomes.json'
+matchups_file = f'week{week}_matchups.json'
+override_json_path = f'week{week}_overrides.json'  # Optional
+grade_picks(week=week, outcomes_json_path=outcomes_json_path, matchups_file=matchups_file, override_json_path=override_json_path)
