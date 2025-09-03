@@ -3,6 +3,7 @@ import pandas as pd
 import json
 import os
 from datetime import datetime, timezone, timedelta
+from io import StringIO  # Added for download buffer
 
 # Function to load JSON (game data from fetch_matchups.py)
 def load_matchups(week):
@@ -175,9 +176,18 @@ else:
                 picks_df = pd.concat([picks_df, pd.DataFrame([data])], ignore_index=True)
                 picks_df.to_csv(picks_path, index=False)
                 st.success(f"Your picks are submitted locally to {picks_path}! Please upload picks.csv to GitHub to persist changes.")
+                # Offer download for cloud users
+                csv_buffer = StringIO()
+                picks_df.to_csv(csv_buffer, index=False)
+                st.download_button(label="Download picks.csv", data=csv_buffer.getvalue(), file_name="picks.csv", mime="text/csv")
             else:
                 pd.DataFrame([data]).to_csv(picks_path, index=False)
                 st.success(f"Your picks are submitted locally to {picks_path}! Please upload picks.csv to GitHub to persist changes.")
+                # Offer download for cloud users
+                df = pd.DataFrame([data])
+                csv_buffer = StringIO()
+                df.to_csv(csv_buffer, index=False)
+                st.download_button(label="Download picks.csv", data=csv_buffer.getvalue(), file_name="picks.csv", mime="text/csv")
 
 # Leaderboard
 if st.button("View Current Standings"):
