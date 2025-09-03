@@ -174,9 +174,10 @@ else:
                                         (picks_df['Email'].str.strip() == email.strip()))]
                 picks_df = pd.concat([picks_df, pd.DataFrame([data])], ignore_index=True)
                 picks_df.to_csv(picks_path, index=False)
+                st.success(f"Your picks are submitted locally to {picks_path}! Please upload picks.csv to GitHub to persist changes.")
             else:
                 pd.DataFrame([data]).to_csv(picks_path, index=False)
-            st.success("Your picks are submitted locally! Please upload picks.csv to GitHub to persist changes.")
+                st.success(f"Your picks are submitted locally to {picks_path}! Please upload picks.csv to GitHub to persist changes.")
 
 # Leaderboard
 if st.button("View Current Standings"):
