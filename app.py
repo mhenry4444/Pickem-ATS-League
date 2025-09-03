@@ -24,12 +24,6 @@ def has_duplicate_games(selected_picks):
             home = parts[1].split(' (')[0].strip()
             game = f"{away} @ {home}"
             games.append(game)
-        elif ' vs ' in pick:
-            parts = pick.split(' vs ')
-            away = parts[0].strip()
-            home = parts[1].split(' (')[0].strip()
-            game = f"{away} @ {home}"
-            games.append(game)
     return len(games) != len(set(games))
 
 # Function to check if submissions are still open
@@ -46,18 +40,19 @@ def compute_weekly_scores(picks_csv_path, outcomes_json_path, matchups_file, wee
         picks_df = pd.read_csv(picks_csv_path)
         picks_df = picks_df[picks_df['Week'] == week]
         if picks_df.empty:
-            return pd.DataFrame(columns=['Name', f'Week {week}'])
+            return pd.DataFrame(columns=['Name', 'Email', f'Week {week}'])
         
         with open(outcomes_json_path, 'r') as f:
             outcomes = json.load(f)
         cover_map = {f"{o['home']} vs {o['away']}": o['cover'] for o in outcomes}
         
-        # Mock TD scorers for testing (replace with fetch_td_scorers in production)
-        td_scorers = set(['Christian McCaffrey', 'Saquon Barkley', 'Jalen Hurts'])  # Adjust for real API
+        # Mock TD scorers for testing (replace with real fetch_td_scorers in production)
+        td_scorers = set(['Christian McCaffrey', 'Saquon Barkley', 'Jalen Hurts'])  # Adjust based on mock or real data
         
         weekly_scores = []
         for _, row in picks_df.iterrows():
             name = row['Name']
+            email = row['Email']
             correct = 0.0
             for i in range(1, 6):
                 pick_str = row[f'Pick{i}']
@@ -67,17 +62,11 @@ def compute_weekly_scores(picks_csv_path, outcomes_json_path, matchups_file, wee
                     second_part = parts[1].strip()
                     if '(' in first_team:
                         picked_team = first_team.split(' (')[0].strip()
-                        opponent = second_part
+                        opponent = second_part.split(' (')[0].strip() if '(Pick' in second_part else second_part
                     else:
                         picked_team = second_part.split(' (')[0].strip()
                         opponent = first_team
                     game_key = f"{opponent} vs {picked_team}" if '(' in first_team else f"{picked_team} vs {opponent}"
-                elif ' vs ' in pick_str:
-                    parts = pick_str.split(' vs ')
-                    picked_team = parts[0].strip()
-                    opponent = parts[1].split(' (')[0].strip()
-                    game_key = f"{picked_team} vs {opponent}"
-                
                 actual_cover = cover_map.get(game_key)
                 if actual_cover and picked_team == actual_cover:
                     correct += 1.0
@@ -88,11 +77,12 @@ def compute_weekly_scores(picks_csv_path, outcomes_json_path, matchups_file, wee
             if player_td in td_scorers:
                 correct += 1.0
             
-            weekly_scores.append({'Name': name, f'Week {week}': correct})
+            weekly_scores.append({'Name': name, 'Email': email, f'Week {week}': correct})
         
         return pd.DataFrame(weekly_scores)
-    except:
-        return pd.DataFrame(columns=['Name', f'Week {week}'])
+    except Exception as e:
+        print(f"Error computing weekly scores: {e}")
+        return pd.DataFrame(columns=['Name', 'Email', f'Week {week}'])
 
 # Set the current week
 current_week = 1  # Update manually
@@ -105,7 +95,7 @@ current_time = datetime.now(timezone.utc)
 if not is_submission_open(matchups, current_time):
     st.error("Submissions are closed for this week. The first game has started.")
 else:
-    # Create pick options: Two per game, away vs home for pick'em, spread on picked team
+    # Create pick options: Two per game, away @ home for pick'em, spread on picked team
     pick_options = []
     for g in matchups:
         home = g['home']
@@ -116,12 +106,12 @@ else:
             home_pick_str = f"{away} @ {home} ({home_spread:+})"
             away_pick_str = f"{away} ({away_spread:+}) @ {home}"
         else:
-            home_pick_str = f"{home} vs {away} (Pick)"
-            away_pick_str = f"{away} vs {home} (Pick)"
+            home_pick_str = f"{away} @ {home} (Pick)"
+            away_pick_str = f"{away} (Pick) @ {home}"
         
         # Add underdog option first
         if home_spread is None:
-            pick_options.append(away_pick_str)
+            pick_options.append(away_pick_str)  # Pick away first
             pick_options.append(home_pick_str)
         elif home_spread > 0:
             pick_options.append(home_pick_str)
@@ -188,34 +178,46 @@ else:
 
 # Leaderboard
 if st.button("View Current Standings"):
-    if os.path.exists('standings.csv') or os.path.exists('picks.csv'):
+    if os.path.exists('picks.csv'):
         # Load cumulative standings
         standings_df = pd.read_csv('standings.csv') if os.path.exists('standings.csv') else pd.DataFrame(columns=['Name', 'Total Correct'])
         
         # Compute weekly scores for all weeks
+        picks_df = pd.read_csv('picks.csv')
+        weeks = sorted(picks_df['Week'].unique())
         weekly_dfs = []
-        if os.path.exists('picks.csv'):
-            picks_df = pd.read_csv('picks.csv')
-            weeks = picks_df['Week'].unique()
-            for week in weeks:
-                outcomes_file = f'week{week}_outcomes.json'
-                matchups_file = f'week{week}_matchups.json'
-                if os.path.exists(outcomes_file) and os.path.exists(matchups_file):
-                    weekly_df = compute_weekly_scores('picks.csv', outcomes_file, matchups_file, week)
-                    if not weekly_df.empty:
-                        weekly_dfs.append(weekly_df)
+        for week in weeks:
+            outcomes_file = f'week{week}_outcomes.json'
+            matchups_file = f'week{week}_matchups.json'
+            if os.path.exists(outcomes_file) and os.path.exists(matchups_file):
+                weekly_df = compute_weekly_scores('picks.csv', outcomes_file, matchups_file, week)
+                if not weekly_df.empty:
+                    weekly_dfs.append(weekly_df)
         
         # Merge weekly scores
         if weekly_dfs:
             leaderboard_df = weekly_dfs[0]
             for df in weekly_dfs[1:]:
-                leaderboard_df = leaderboard_df.merge(df, on='Name', how='outer')
-            # Merge with cumulative totals
+                leaderboard_df = leaderboard_df.merge(df, on=['Name', 'Email'], how='outer')
+            leaderboard_df = leaderboard_df.fillna(0.0)
+            # Add or merge cumulative totals
             if not standings_df.empty:
-                leaderboard_df = leaderboard_df.merge(standings_df[['Name', 'Total Correct']], on='Name', how='outer')
-            leaderboard_df = leaderboard_df.fillna(0)
+                leaderboard_df = leaderboard_df.merge(standings_df[['Name', 'Total Correct']], on='Name', how='outer').fillna(0.0)
+            else:
+                leaderboard_df['Total Correct'] = leaderboard_df[[col for col in leaderboard_df.columns if col.startswith('Week ')]].sum(axis=1)
+            
+            # Sort by Total Correct descending
+            leaderboard_df = leaderboard_df.sort_values('Total Correct', ascending=False).reset_index(drop=True)
+            
+            # Add Rank
+            leaderboard_df['Rank'] = leaderboard_df.index + 1
+            
+            # Reorder columns: Rank, Name, Email, weekly columns, Total Correct
+            weekly_cols = [col for col in leaderboard_df.columns if col.startswith('Week ')]
+            leaderboard_df = leaderboard_df[['Rank', 'Name', 'Email'] + weekly_cols + ['Total Correct']]
+            
             st.dataframe(leaderboard_df)
         else:
             st.info("No standings or weekly scores available. Grade picks first!")
     else:
-        st.info("No standings or picks yet. Submit picks and grade them!")
+        st.info("No picks yet. Submit picks and grade them!")
