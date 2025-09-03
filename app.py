@@ -3,8 +3,6 @@ import pandas as pd
 import json
 import os
 from datetime import datetime, timezone, timedelta
-import gspread
-from oauth2client.service_account import ServiceAccountCredentials
 
 # Function to load JSON (game data from fetch_matchups.py)
 def load_matchups(week):
@@ -49,7 +47,7 @@ def compute_weekly_scores(picks_csv_path, outcomes_json_path, matchups_file, wee
             outcomes = json.load(f)
         cover_map = {f"{o['home']} vs {o['away']}": o['cover'] for o in outcomes}
         
-        # Mock TD scorers for testing
+        # Mock TD scorers for testing (replace with real fetch_td_scorers in production)
         td_scorers = set(['Christian McCaffrey', 'Saquon Barkley', 'Jalen Hurts'])
         
         weekly_scores = []
@@ -86,18 +84,6 @@ def compute_weekly_scores(picks_csv_path, outcomes_json_path, matchups_file, wee
     except Exception as e:
         print(f"Error computing weekly scores: {e}")
         return pd.DataFrame(columns=['Name', 'Email', f'Week {week}'])
-
-# Google Sheets setup
-def initialize_google_sheets():
-    try:
-        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-        creds = ServiceAccountCredentials.from_json_keyfile_name('credentials.json', scope)
-        client = gspread.authorize(creds)
-        sheet = client.open("Pickem League Picks").sheet1  # Replace with your sheet name
-        return sheet
-    except Exception as e:
-        st.error(f"Google Sheets setup failed: {e}. Falling back to local picks.csv.")
-        return None
 
 # Set the current week
 current_week = 1  # Update manually each Wednesday
@@ -176,58 +162,26 @@ else:
             for i, pick in enumerate(selected_picks, 1):
                 data[f'Pick{i}'] = pick
             
-            # Initialize Google Sheets
-            sheet = initialize_google_sheets()
-            if sheet:
-                # Save to Google Sheets
-                try:
-                    existing_data = sheet.get_all_records()
-                    df = pd.DataFrame(existing_data) if existing_data else pd.DataFrame(columns=data.keys())
-                    if not df.empty:
-                        df = df[~((df['Week'] == current_week) & 
-                                (df['Name'].str.strip() == name.strip()) & 
-                                (df['Email'].str.strip() == email.strip()))]
-                    df = pd.concat([df, pd.DataFrame([data])], ignore_index=True)
-                    sheet.update([df.columns.values.tolist()] + df.values.tolist())
-                    st.success("Your picks are submitted to Google Sheets! Thanks!")
-                except Exception as e:
-                    st.error(f"Google Sheets update failed: {e}. Falling back to local file.")
-                    if os.path.exists('picks.csv'):
-                        picks_df = pd.read_csv('picks.csv')
-                        if 'Timestamp' not in picks_df.columns:
-                            picks_df['Timestamp'] = ''
-                        if not existing_picks.empty:
-                            picks_df = picks_df[~((picks_df['Week'] == current_week) & 
-                                                (picks_df['Name'].str.strip() == name.strip()) & 
-                                                (picks_df['Email'].str.strip() == email.strip()))]
-                        picks_df = pd.concat([picks_df, pd.DataFrame([data])], ignore_index=True)
-                        picks_df.to_csv('picks.csv', index=False)
-                    else:
-                        pd.DataFrame([data]).to_csv('picks.csv', index=False)
-                    st.success("Your picks are submitted locally! Thanks!")
+            # Save to local picks.csv
+            if os.path.exists('picks.csv'):
+                picks_df = pd.read_csv('picks.csv')
+                if 'Timestamp' not in picks_df.columns:
+                    picks_df['Timestamp'] = ''
+                if not existing_picks.empty:
+                    picks_df = picks_df[~((picks_df['Week'] == current_week) & 
+                                        (picks_df['Name'].str.strip() == name.strip()) & 
+                                        (picks_df['Email'].str.strip() == email.strip()))]
+                picks_df = pd.concat([picks_df, pd.DataFrame([data])], ignore_index=True)
+                picks_df.to_csv('picks.csv', index=False)
             else:
-                # Fallback to local picks.csv
-                if os.path.exists('picks.csv'):
-                    picks_df = pd.read_csv('picks.csv')
-                    if 'Timestamp' not in picks_df.columns:
-                        picks_df['Timestamp'] = ''
-                    if not existing_picks.empty:
-                        picks_df = picks_df[~((picks_df['Week'] == current_week) & 
-                                            (picks_df['Name'].str.strip() == name.strip()) & 
-                                            (picks_df['Email'].str.strip() == email.strip()))]
-                    picks_df = pd.concat([picks_df, pd.DataFrame([data])], ignore_index=True)
-                    picks_df.to_csv('picks.csv', index=False)
-                else:
-                    pd.DataFrame([data]).to_csv('picks.csv', index=False)
-                st.success("Your picks are submitted locally! Thanks!")
+                pd.DataFrame([data]).to_csv('picks.csv', index=False)
+            st.success("Your picks are submitted locally! Please upload picks.csv to GitHub to persist changes.")
 
 # Leaderboard
 if st.button("View Current Standings"):
     if os.path.exists('picks.csv'):
-        # Load cumulative standings
         standings_df = pd.read_csv('standings.csv') if os.path.exists('standings.csv') else pd.DataFrame(columns=['Name', 'Total Correct'])
         
-        # Compute weekly scores for all weeks
         picks_df = pd.read_csv('picks.csv')
         weeks = sorted(picks_df['Week'].unique())
         weekly_dfs = []
@@ -239,7 +193,6 @@ if st.button("View Current Standings"):
                 if not weekly_df.empty:
                     weekly_dfs.append(weekly_df)
         
-        # Merge weekly scores
         if weekly_dfs:
             leaderboard_df = weekly_dfs[0]
             for df in weekly_dfs[1:]:
