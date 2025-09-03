@@ -47,7 +47,8 @@ def compute_weekly_scores(picks_csv_path, outcomes_json_path, matchups_file, wee
             outcomes = json.load(f)
         cover_map = {f"{o['home']} vs {o['away']}": o['cover'] for o in outcomes}
         
-        td_scorers = set(['Christian McCaffrey', 'Saquon Barkley', 'Jalen Hurts'])  # Mock for testing
+        # Mock TD scorers for testing (replace with real fetch_td_scorers in production)
+        td_scorers = set(['Christian McCaffrey', 'Saquon Barkley', 'Jalen Hurts'])
         
         weekly_scores = []
         for _, row in picks_df.iterrows():
@@ -133,7 +134,7 @@ else:
 
     # Admin authentication for download
     admin_password = st.text_input("Admin Password (leave blank if submitting picks)", type="password")
-    if admin_password == "Lock$3421":  # Replace with your chosen password
+    if admin_password == "your_secure_password":  # Replace with your chosen password
         st.session_state['admin_authenticated'] = True
     else:
         st.session_state['admin_authenticated'] = False
