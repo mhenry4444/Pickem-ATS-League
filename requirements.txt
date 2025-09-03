@@ -1,5 +1,3 @@
 streamlit
 pandas
 requests
-gspread
-oauth2client
