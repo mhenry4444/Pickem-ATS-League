@@ -1,7 +1,7 @@
 import pandas as pd
 import json
 import requests
-import os  # Added to fix NameError
+import os
 
 def fetch_td_scorers(week, matchups_file):
     try:
@@ -50,46 +50,20 @@ def grade_picks(picks_csv_path='picks.csv', outcomes_json_path=None, matchups_fi
     
     # Filter to this week
     picks_df = picks_df[picks_df['Week'] == week]
-    if picks_df.empty:
-        print(f"No picks found for Week {week}.")
-        return
     
-    # Load outcomes JSON for ATS covers
-    try:
-        with open(outcomes_json_path, 'r') as f:
-            outcomes = json.load(f)
-    except FileNotFoundError:
-        print(f"Error: {outcomes_json_path} not found. Run fetch_scores.py first.")
-        return
-    
-    # Load manual overrides if provided
-    override_covers = {}
-    override_td_scorers = set()
-    if override_json_path and os.path.exists(override_json_path):
-        try:
-            with open(override_json_path, 'r') as f:
-                overrides = json.load(f)
-            override_covers = overrides.get('covers', {})
-            override_td_scorers = set(overrides.get('td_scorers', []))
-            print(f"Loaded overrides from {override_json_path}: {len(override_covers)} covers, {len(override_td_scorers)} TD scorers")
-        except:
-            print(f"Error: Invalid {override_json_path}. Using API data only.")
-    
-    # Map game to cover: key as "HOME vs AWAY"
-    cover_map = {f"{o['home']} vs {o['away']}": o['cover'] for o in outcomes}
-    for game_key, cover in override_covers.items():
-        cover_map[game_key] = cover
-    
-    # Fetch TD scorers for bonus
+    # Fetch TD scorers
     td_scorers = fetch_td_scorers(week, matchups_file)
-    td_scorers.update(override_td_scorers)
     
-    # Grade each person
+    # Load outcomes
+    with open(outcomes_json_path, 'r') as f:
+        outcomes = json.load(f)
+    cover_map = {f"{o['home']} vs {o['away']}": o['cover'] for o in outcomes}
+    
     weekly_scores = []
     for _, row in picks_df.iterrows():
         name = row['Name']
-        correct = 0.0  # Use float for 0.5 point pushes
-        # Grade 5 ATS picks
+        email = row['Email']
+        correct = 0.0
         for i in range(1, 6):
             pick_str = row[f'Pick{i}']
             if ' @ ' in pick_str:
@@ -97,20 +71,20 @@ def grade_picks(picks_csv_path='picks.csv', outcomes_json_path=None, matchups_fi
                 first_team = parts[0].strip()
                 second_part = parts[1].strip()
                 if '(' in first_team:
-                    # Picking away, e.g., "PHI (-7.0) @ DAL"
                     picked_team = first_team.split(' (')[0].strip()
-                    opponent = second_part
+                    spread = float(second_part.split(')')[0].split('(')[1]) if '(' in second_part else 0.0
+                    opponent = second_part.split(' (')[0].strip() if '(Pick' in second_part else second_part
                 else:
-                    # Picking home, e.g., "PHI @ DAL (+7.0)"
                     picked_team = second_part.split(' (')[0].strip()
+                    spread = float(first_team.split(')')[0].split('(')[1]) if '(' in first_team else 0.0
                     opponent = first_team
                 game_key = f"{opponent} vs {picked_team}" if '(' in first_team else f"{picked_team} vs {opponent}"
                 actual_cover = cover_map.get(game_key)
-                if actual_cover and picked_team == actual_cover:
-                    correct += 1.0  # Correct pick
-                elif actual_cover == "Push":
-                    correct += 0.5  # Push
-                # Else: Incorrect pick, 0 points
+                if actual_cover:
+                    if actual_cover == "Push" and spread == 0.0:  # Handle pick'em as 0-point spread
+                        correct += 0.5
+                    elif picked_team == actual_cover:
+                        correct += 1.0
         
         # Grade Player TD bonus
         player_td = row['PlayerTD'].strip()

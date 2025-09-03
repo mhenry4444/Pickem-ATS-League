@@ -63,16 +63,19 @@ def compute_weekly_scores(picks_csv_path, outcomes_json_path, matchups_file, wee
                     second_part = parts[1].strip()
                     if '(' in first_team:
                         picked_team = first_team.split(' (')[0].strip()
+                        spread = float(second_part.split(')')[0].split('(')[1]) if '(' in second_part else 0.0
                         opponent = second_part.split(' (')[0].strip() if '(Pick' in second_part else second_part
                     else:
                         picked_team = second_part.split(' (')[0].strip()
+                        spread = float(first_team.split(')')[0].split('(')[1]) if '(' in first_team else 0.0
                         opponent = first_team
                     game_key = f"{opponent} vs {picked_team}" if '(' in first_team else f"{picked_team} vs {opponent}"
-                actual_cover = cover_map.get(game_key)
-                if actual_cover and picked_team == actual_cover:
-                    correct += 1.0
-                elif actual_cover == "Push":
-                    correct += 0.5
+                    actual_cover = cover_map.get(game_key)
+                    if actual_cover:
+                        if actual_cover == "Push" and spread == 0.0:  # Handle pick'em as 0-point spread
+                            correct += 0.5
+                        elif picked_team == actual_cover:
+                            correct += 1.0
             
             player_td = row['PlayerTD'].strip()
             if player_td in td_scorers:
@@ -241,4 +244,3 @@ if st.button("View Current Standings"):
             st.info("No standings or weekly scores available. Grade picks first!")
     else:
         st.info("No picks yet. Submit picks and grade them!")
-
