@@ -3,7 +3,6 @@ import json
 import requests
 
 def fetch_td_scorers(week, matchups_file):
-    # Load matchups to get game IDs
     try:
         with open(matchups_file, 'r') as f:
             matchups = json.load(f)
@@ -33,11 +32,10 @@ def fetch_td_scorers(week, matchups_file):
                         for key in td_keys:
                             if key in stats and int(stats[key]) > 0:
                                 td_scorers.add(athlete['athlete']['displayName'])
-                                break  # Add once per player per game
-    
+                                break
     return td_scorers
 
-def grade_picks(picks_csv_path='picks.csv', outcomes_json_path=None, matchups_file=None, week=None, output_csv_path='standings.csv'):
+def grade_picks(picks_csv_path='picks.csv', outcomes_json_path=None, matchups_file=None, override_json_path=None, week=None, output_csv_path='standings.csv'):
     # Load picks from CSV
     try:
         picks_df = pd.read_csv(picks_csv_path)
@@ -63,11 +61,29 @@ def grade_picks(picks_csv_path='picks.csv', outcomes_json_path=None, matchups_fi
         print(f"Error: {outcomes_json_path} not found. Run fetch_scores.py first.")
         return
     
+    # Load manual overrides if provided
+    override_covers = {}
+    override_td_scorers = set()
+    if override_json_path and os.path.exists(override_json_path):
+        try:
+            with open(override_json_path, 'r') as f:
+                overrides = json.load(f)
+            override_covers = overrides.get('covers', {})
+            override_td_scorers = set(overrides.get('td_scorers', []))
+            print(f"Loaded overrides from {override_json_path}: {len(override_covers)} covers, {len(override_td_scorers)} TD scorers")
+        except:
+            print(f"Error: Invalid {override_json_path}. Using API data only.")
+    
     # Map game to cover: key as "HOME vs AWAY"
     cover_map = {f"{o['home']} vs {o['away']}": o['cover'] for o in outcomes}
+    # Apply manual overrides
+    for game_key, cover in override_covers.items():
+        cover_map[game_key] = cover
     
     # Fetch TD scorers for bonus
     td_scorers = fetch_td_scorers(week, matchups_file)
+    # Apply manual TD overrides
+    td_scorers.update(override_td_scorers)
     
     # Grade each person
     weekly_scores = []
@@ -77,20 +93,18 @@ def grade_picks(picks_csv_path='picks.csv', outcomes_json_path=None, matchups_fi
         # Grade 5 ATS picks
         for i in range(1, 6):
             pick_str = row[f'Pick{i}']
-            # Parse pick_str, e.g., "PHI @ DAL (+7.0)" or "PHI (-7.0) @ DAL"
             if ' @ ' in pick_str:
                 parts = pick_str.split(' @ ')
                 first_team = parts[0].strip()
                 second_part = parts[1].strip()
                 if '(' in first_team:
-                    # Picking away, e.g., "PHI (-7.0) @ DAL" -> picked_team = PHI, game = PHI vs DAL
+                    # Picking away, e.g., "PHI (-7.0) @ DAL"
                     picked_team = first_team.split(' (')[0].strip()
                     opponent = second_part
                 else:
-                    # Picking home, e.g., "PHI @ DAL (+7.0)" -> picked_team = DAL, game = DAL vs PHI
+                    # Picking home, e.g., "PHI @ DAL (+7.0)"
                     picked_team = second_part.split(' (')[0].strip()
                     opponent = first_team
-                # Game key: Always away vs home for consistency with outcomes
                 game_key = f"{opponent} vs {picked_team}" if '(' in first_team else f"{picked_team} vs {opponent}"
                 actual_cover = cover_map.get(game_key)
                 if actual_cover and picked_team == actual_cover:
@@ -98,7 +112,7 @@ def grade_picks(picks_csv_path='picks.csv', outcomes_json_path=None, matchups_fi
                 elif actual_cover == "Push":
                     pass  # No point for push
         
-        # Grade Player TD bonus (1 point if they scored any TD)
+        # Grade Player TD bonus
         player_td = row['PlayerTD'].strip()
         if player_td in td_scorers:
             correct += 1
@@ -132,4 +146,5 @@ def grade_picks(picks_csv_path='picks.csv', outcomes_json_path=None, matchups_fi
 week = 1  # Change this
 outcomes_json_path = f'week{week}_outcomes.json'
 matchups_file = f'week{week}_matchups.json'
-grade_picks(week=week, outcomes_json_path=outcomes_json_path, matchups_file=matchups_file)
+override_json_path = f'week{week}_overrides.json'  # Optional
+grade_picks(week=week, outcomes_json_path=outcomes_json_path, matchups_file=matchups_file, override_json_path=override_json_path)
