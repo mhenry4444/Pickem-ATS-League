@@ -35,7 +35,7 @@ def get_deadline(current_week):
     deadline = week_start + pd.Timedelta(days=2, hours=16, minutes=15)  # Sunday 9:15 AM PST
     return deadline
 
-# Function to compute weekly scores (adapted from grade_picks.py)
+# Function to compute weekly scores
 def compute_weekly_scores(picks_csv_path, outcomes_json_path, matchups_file, week):
     try:
         picks_df = pd.read_csv(picks_csv_path)
@@ -47,8 +47,7 @@ def compute_weekly_scores(picks_csv_path, outcomes_json_path, matchups_file, wee
             outcomes = json.load(f)
         cover_map = {f"{o['home']} vs {o['away']}": o['cover'] for o in outcomes}
         
-        # Mock TD scorers for testing (replace with real fetch_td_scorers in production)
-        td_scorers = set(['Christian McCaffrey', 'Saquon Barkley', 'Jalen Hurts'])
+        td_scorers = set(['Christian McCaffrey', 'Saquon Barkley', 'Jalen Hurts'])  # Mock for testing
         
         weekly_scores = []
         for _, row in picks_df.iterrows():
@@ -212,9 +211,14 @@ else:
 # Leaderboard
 if st.button("View Current Standings"):
     if os.path.exists(r'C:\Users\matth\PYTHONTEST\Pickem ATS league\picks.csv'):
-        standings_df = pd.read_csv('standings.csv') if os.path.exists('standings.csv') else pd.DataFrame(columns=['Name', 'Total Correct'])
+        # Load standings and picks
+        standings_df = pd.read_csv('standings.csv', index_col=False) if os.path.exists('standings.csv') else pd.DataFrame(columns=['Name', 'Total Correct'])
+        picks_df = pd.read_csv(r'C:\Users\matth\PYTHONTEST\Pickem ATS league\picks.csv', index_col=False)
         
-        picks_df = pd.read_csv(r'C:\Users\matth\PYTHONTEST\Pickem ATS league\picks.csv')
+        # Get unique Name and Email from picks
+        name_email_df = picks_df[['Name', 'Email']].drop_duplicates()
+        
+        # Compute weekly scores
         weeks = sorted(picks_df['Week'].unique())
         weekly_dfs = []
         for week in weeks:
@@ -225,22 +229,32 @@ if st.button("View Current Standings"):
                 if not weekly_df.empty:
                     weekly_dfs.append(weekly_df)
         
+        # Initialize leaderboard
         if weekly_dfs:
             leaderboard_df = weekly_dfs[0]
             for df in weekly_dfs[1:]:
                 leaderboard_df = leaderboard_df.merge(df, on=['Name', 'Email'], how='outer')
             leaderboard_df = leaderboard_df.fillna(0.0)
-            if not standings_df.empty:
-                leaderboard_df = leaderboard_df.merge(standings_df[['Name', 'Total Correct']], on='Name', how='outer').fillna(0.0)
-            else:
-                leaderboard_df['Total Correct'] = leaderboard_df[[col for col in leaderboard_df.columns if col.startswith('Week ')]].sum(axis=1)
-            
-            leaderboard_df = leaderboard_df.sort_values('Total Correct', ascending=False).reset_index(drop=True)
-            leaderboard_df['Rank'] = leaderboard_df.index + 1
-            weekly_cols = [col for col in leaderboard_df.columns if col.startswith('Week ')]
-            leaderboard_df = leaderboard_df[['Rank', 'Name', 'Email'] + weekly_cols + ['Total Correct']]
-            st.dataframe(leaderboard_df, hide_index=True)
         else:
-            st.info("No standings or weekly scores available. Grade picks first!")
+            # If no weekly scores, start with picks data
+            leaderboard_df = name_email_df.copy()
+            leaderboard_df['Week 1'] = 0.0  # Default to 0 if no outcomes
+
+        # Merge with standings on Name
+        if not standings_df.empty:
+            leaderboard_df = leaderboard_df.merge(standings_df[['Name', 'Total Correct']], on='Name', how='left').fillna({'Total Correct': 0.0})
+        else:
+            leaderboard_df['Total Correct'] = leaderboard_df[[col for col in leaderboard_df.columns if col.startswith('Week ')]].sum(axis=1)
+        
+        # Sort by Total Correct descending
+        leaderboard_df = leaderboard_df.sort_values('Total Correct', ascending=False).reset_index(drop=True)
+        leaderboard_df['Rank'] = leaderboard_df.index + 1
+        
+        # Reorder columns: Rank, Name, Email, weekly columns, Total Correct
+        weekly_cols = [col for col in leaderboard_df.columns if col.startswith('Week ')]
+        leaderboard_df = leaderboard_df[['Rank', 'Name', 'Email'] + weekly_cols + ['Total Correct']]
+        
+        # Display
+        st.dataframe(leaderboard_df, hide_index=True)
     else:
         st.info("No picks yet. Submit picks and grade them!")
