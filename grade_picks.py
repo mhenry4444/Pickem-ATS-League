@@ -1,6 +1,7 @@
 import pandas as pd
 import json
 import requests
+import os  # Added to fix NameError
 
 def fetch_td_scorers(week, matchups_file):
     try:
